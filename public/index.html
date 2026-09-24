@@ -23,6 +23,7 @@
         <button id="btn-inventory" class="btn btn-accent">🔍 现场盘点</button>
         <button id="btn-responsibility" class="btn">📋 人员交接责任单</button>
         <button id="btn-appearance" class="btn">🎭 出场时段核对</button>
+        <button id="btn-conflict-fix" class="btn btn-accent">🛠 冲突修复预演</button>
         <button id="btn-reverify" class="btn" title="重新读取记录并按时间重放">↻ 重新核验</button>
       </div>
     </div>
@@ -289,8 +290,7 @@
 
   <!-- 出场时段到位核对弹窗 -->
   <dialog id="appearance-dialog" class="dialog dialog-xwide">
-    <form method="dialog" id="appearance-form">
-      <h3>出场时段到位核对</h3>
+    <form method="dialog" id="appearance-form">      <h3>出场时段到位核对</h3>
       <p class="dialog-tip">
         逐行填写<strong>道具、出场演员、起始 / 结束分钟</strong>，区间<strong>左闭右开 [起始, 结束)</strong>：
         起点与区间内每个交接分钟均在<strong>该分钟全部交接完成后</strong>判定持有人，<strong>终点分钟的交接不计入</strong>。
@@ -307,6 +307,29 @@
       <div class="dialog-actions">
         <button type="button" class="btn" data-close>取消</button>
         <button type="submit" class="btn btn-primary" id="app-submit">开始核对</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 交接冲突修复预演弹窗（只读，展示单条记录改动候选，不自动修改） -->
+  <dialog id="fix-dialog" class="dialog dialog-xwide">
+    <form method="dialog" id="fix-form">
+      <h3>交接冲突修复预演</h3>
+      <p class="dialog-tip">
+        选择一件<strong>交接链冲突</strong>的道具，系统围绕<strong>首个冲突分钟</strong>逐条枚举<strong>单条记录改动</strong>：
+        歧义（多条可接续）时逐条尝试删除可接续记录；断链时逐条尝试删除当分钟剩余记录，
+        或把交出者改为冲突前持有人（不与接收者相同）。每个候选都按现有同分钟唯一链规则
+        <strong>重放该道具全部记录</strong>，仅展示整链无冲突的方案（含改动记录、最终持有人与未归仓状态）。
+        预演<strong>只读、不会自动修改任何记录</strong>；方案中的记录编号可点击定位到右下原记录，人工核实后再手动编辑。
+      </p>
+      <div class="inv-rows-bar">
+        <span class="inv-rows-title">冲突道具</span>
+        <select id="fix-prop" class="fix-prop-select"></select>
+        <button type="button" class="btn btn-sm btn-primary" id="btn-fix-run">开始预演</button>
+      </div>
+      <div id="fix-result" class="fix-result"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>关闭</button>
       </div>
     </form>
   </dialog>

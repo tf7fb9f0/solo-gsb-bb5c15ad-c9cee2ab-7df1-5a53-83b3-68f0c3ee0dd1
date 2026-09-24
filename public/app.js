@@ -86,6 +86,13 @@ const els = {
   appBannerOk: $('#app-banner-ok'),
   appTableBody: document.querySelector('#app-table tbody'),
   btnAppClose: $('#btn-app-close'),
+  // 交接冲突修复预演
+  btnConflictFix: $('#btn-conflict-fix'),
+  fixDialog: $('#fix-dialog'),
+  fixForm: $('#fix-form'),
+  fixPropSelect: $('#fix-prop'),
+  btnFixRun: $('#btn-fix-run'),
+  fixResult: $('#fix-result'),
 };
 
 const STATUS_TEXT = {
@@ -220,6 +227,11 @@ function renderConflictBox(result) {
       <div class="conflict-head">冲突类型：${typeText} · 第${c.minute}分钟</div>
       <div>${esc(c.reason)}</div>
       <div style="margin-top:4px">定位记录：${links}（已在右下表中红色标出）</div>
+      <div style="margin-top:8px">
+        <button type="button" class="btn btn-sm btn-primary" data-fix-prop="${esc(result.propId)}">
+          🛠 冲突修复预演（只改一条记录，整链重放）
+        </button>
+      </div>
     </div>`;
 }
 
@@ -468,6 +480,18 @@ function bindEvents() {
   });
   els.btnAppClose.addEventListener('click', () => els.appPanel.classList.add('hidden'));
 
+  // 交接冲突修复预演（只读）
+  els.btnConflictFix.addEventListener('click', () => openFixDialog());
+  els.btnFixRun.addEventListener('click', runConflictFix);
+  els.fixResult.addEventListener('click', (e) => {
+    const link = e.target.closest?.('[data-record-id]');
+    if (link) {
+      // 关闭预演弹窗后定位右下记录表中的原记录，供人工核实后编辑
+      els.fixDialog.close();
+      locateRecord(link.dataset.recordId);
+    }
+  });
+
   // 批量交接预演
   els.btnBatch.addEventListener('click', openBatchDialog);
   els.btnBatchAddRow.addEventListener('click', () => {
@@ -534,6 +558,11 @@ function bindEvents() {
   document.addEventListener('click', (e) => {
     const t = e.target;
 
+    const fixProp = t.closest?.('[data-fix-prop]');
+    if (fixProp) {
+      openFixDialog(fixProp.dataset.fixProp);
+      return;
+    }
     const editProp = t.closest?.('[data-edit-prop]');
     if (editProp) {
       const p = state.props.find((x) => x.id === editProp.dataset.editProp);
@@ -1145,6 +1174,129 @@ async function submitAppearance() {
     toast(result.summary.allInPosition ? '全部出场行核对到位（未改动交接记录）' : '核对完成（结果仅本次有效，未改动交接记录）',
       !result.summary.allInPosition);
   } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+/* ==================== 交接冲突修复预演（只读） ==================== */
+
+function conflictProps() {
+  return state.verification.results.filter((r) => r.status === 'CONFLICT');
+}
+
+function openFixDialog(propId = null) {
+  const conflicts = conflictProps();
+  if (conflicts.length === 0) {
+    toast('当前没有交接链冲突的道具，无需修复预演', true);
+    return;
+  }
+  els.fixPropSelect.innerHTML = conflicts.map((r) => {
+    const p = state.props.find((x) => x.id === r.propId);
+    return `<option value="${esc(r.propId)}">${esc(p ? p.name : r.propId)}（第${r.conflict.minute}分钟 · ${
+      r.conflict.type === 'AMBIGUOUS' ? '多条可接续' : '断链'
+    }）</option>`;
+  }).join('');
+  if (propId && conflicts.some((r) => r.propId === propId)) {
+    els.fixPropSelect.value = propId;
+  }
+  els.fixResult.innerHTML = '';
+  els.fixDialog.showModal();
+  runConflictFix();
+}
+
+function fixChainHtml(plan) {
+  const changedId = plan.record.id;
+  const deleted = plan.action === 'DELETE';
+  const nodes = [`<span class="chain-node">${esc(state.warehouse)}</span>`];
+  plan.chain.forEach((r) => {
+    const changed = r.id === changedId && !deleted;
+    nodes.push(
+      `<span class="chain-arrow">→</span>` +
+      `<span class="chain-node${changed ? ' fix-node-changed' : ''}">${esc(r.to)}</span>` +
+      `<span class="chain-meta">[第${r.minute}分 · <a data-record-id="${esc(r.id)}" title="定位原记录">${shortId(r.id)}</a>]</span>`
+    );
+  });
+  return `<div class="chain fix-chain">${nodes.join(' ')}</div>`;
+}
+
+function fixPlanCard(plan) {
+  let actionText;
+  let changeLine;
+  if (plan.action === 'DELETE') {
+    actionText = '删除 1 条记录';
+    changeLine =
+      `删除记录 <a data-record-id="${esc(plan.record.id)}" title="定位原记录"><strong>${shortId(plan.record.id)}</strong></a>` +
+      `（第${plan.record.minute}分 ${esc(plan.record.from)} → ${esc(plan.record.to)}${
+        plan.record.note ? esc(`，${plan.record.note}`) : ''
+      }），删除后该道具剩余 ${plan.totalCount} 条记录。`;
+  } else {
+    actionText = '修改交出者';
+    changeLine =
+      `把记录 <a data-record-id="${esc(plan.record.id)}" title="定位原记录"><strong>${shortId(plan.record.id)}</strong></a>` +
+      `（第${plan.record.minute}分 ${esc(plan.record.from)} → ${esc(plan.record.to)}）的交出者` +
+      `由 <strong>「${esc(plan.fromBefore)}」</strong>改为冲突前持有人 <strong>「${esc(plan.fromAfter)}」</strong>。`;
+  }
+  const holderBadge = plan.returned
+    ? '<span class="badge badge-ok">✓ 已归仓</span>'
+    : '<span class="badge badge-warn">⚠ 演出结束未归仓</span>';
+  return `
+    <div class="fix-plan">
+      <div class="fix-plan-head">
+        方案 ${plan.no} · ${actionText}
+        ${holderBadge}
+      </div>
+      <div class="fix-plan-line">改动记录：${changeLine}</div>
+      <div class="fix-plan-line">
+        重放结果：该道具全部 ${plan.totalCount} 条记录均可唯一接续（重放 ${plan.replayedCount} 条），
+        最终持有人：<strong>「${esc(plan.finalHolder)}」</strong>。
+      </div>
+      ${fixChainHtml(plan)}
+    </div>`;
+}
+
+function renderFixResult(data) {
+  const c = data.conflict;
+  const head = `
+    <div class="fix-conflict-head">
+      ${esc(data.propName)} · 首个冲突分钟：第${c.minute}分 · ${esc(c.typeText)}
+      （冲突前持有人：「${esc(c.holder)}」）
+    </div>
+    <div class="fix-conflict-reason">${esc(c.reason)}</div>`;
+
+  if (!data.hasFix) {
+    els.fixResult.innerHTML = `
+      ${head}
+      <div class="banner banner-error">✕ ${esc(data.message)}</div>
+      <div class="fix-rejected">共排除 ${data.rejectedCount} 个候选（整链重放后仍冲突，不构成可行方案）。</div>`;
+    return;
+  }
+
+  const rejectedNote = data.rejectedCount
+    ? `另有 ${data.rejectedCount} 个单条改动候选重放后整链仍冲突，已排除。`
+    : '';
+  els.fixResult.innerHTML = `
+    ${head}
+    <div class="banner banner-ok">🛠 ${esc(data.message)}</div>
+    <div class="fix-rejected">${esc(rejectedNote)}</div>
+    ${data.feasible.map(fixPlanCard).join('')}
+    <div class="fix-readonly">预演只读，未修改任何记录；请点击记录编号定位原记录，人工核实后再在记录表中修改或删除。</div>`;
+}
+
+async function runConflictFix() {
+  const propId = els.fixPropSelect.value;
+  if (!propId) {
+    toast('请先选择一件冲突道具', true);
+    return;
+  }
+  els.fixResult.innerHTML = '<div class="fix-loading">正在按同分钟唯一链规则重放全部候选…</div>';
+  try {
+    const data = await api('/api/conflict-fix/preview', {
+      method: 'POST',
+      body: JSON.stringify({ propId }),
+    });
+    renderFixResult(data);
+  } catch (err) {
+    els.fixResult.innerHTML = `<div class="banner banner-error">${esc(err.message)}</div>`;
     toast(err.message, true);
   }
 }

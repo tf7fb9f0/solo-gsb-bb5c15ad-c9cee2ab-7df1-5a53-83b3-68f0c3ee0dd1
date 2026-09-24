@@ -520,6 +520,63 @@ main .btn:hover { background: var(--muted-bg); color: var(--ink); }
 }
 .app-row-no { text-align: center; color: var(--ink-soft); font-size: 12px; font-weight: 600; }
 
+/* ---------- 交接冲突修复预演 ---------- */
+.fix-prop-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #cfd5de;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.fix-prop-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(29, 78, 137, 0.15);
+}
+.fix-result {
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+  margin-top: 4px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.fix-conflict-head { font-weight: 700; color: var(--error); font-size: 13.5px; }
+.fix-conflict-reason {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  background: #f7f9fb;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 6px 0 10px;
+}
+.fix-plan {
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--ok);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #fcfefd;
+}
+.fix-plan-head { font-weight: 700; font-size: 13.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fix-plan-line { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; }
+.fix-plan-line strong { color: var(--ink); }
+.fix-plan-line a, .fix-chain a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+.fix-chain { margin-top: 8px; }
+.fix-node-changed { color: var(--ok); box-shadow: inset 0 -2px 0 var(--ok); }
+.fix-rejected { font-size: 12.5px; color: var(--ink-soft); margin: 4px 0 8px; }
+.fix-readonly {
+  font-size: 12px;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin-top: 4px;
+}
+.fix-loading { font-size: 13px; color: var(--ink-soft); padding: 14px 0; }
+.fix-result .banner { margin: 0 0 8px; }
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 980px) {
   .grid { grid-template-columns: 1fr; }

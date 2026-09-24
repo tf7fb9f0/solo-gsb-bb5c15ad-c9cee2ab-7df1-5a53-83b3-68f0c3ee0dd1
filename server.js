@@ -9,6 +9,7 @@ const { checkInventory } = require('./src/inventory');
 const { previewBatch, hashRows } = require('./src/batch');
 const { buildResponsibilitySheet } = require('./src/responsibility');
 const { checkAppearances } = require('./src/appearance');
+const { previewConflictFix } = require('./src/conflict-fix');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -367,6 +368,28 @@ app.post('/api/records/batch/commit', asyncRoute((req, res) => {
   previews.delete(String(body.previewId));
 
   res.status(201).json({ inserted: newRecords.length, records: newRecords, rev: store.getData().rev });
+}));
+
+/* ---------------- 交接冲突修复预演（只读，枚举单条记录改动，不改写交接记录） ---------------- */
+
+app.post('/api/conflict-fix/preview', asyncRoute((req, res) => {
+  const body = req.body || {};
+
+  let propId;
+  try {
+    propId = nonEmpty(body.propId, '道具');
+  } catch (err) {
+    return badRequest(res, err.message);
+  }
+
+  try {
+    // 纯读取 + 即时重放，不写入任何数据
+    return res.json(previewConflictFix(store.getData(), propId));
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message });
+    if (err.code === 'NO_CONFLICT') return badRequest(res, err.message);
+    throw err;
+  }
 }));
 
 /* ---------------- 错误兜底 ---------------- */
