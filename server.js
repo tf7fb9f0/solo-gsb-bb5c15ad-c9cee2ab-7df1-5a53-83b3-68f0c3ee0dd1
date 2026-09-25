@@ -9,6 +9,7 @@ const { checkInventory } = require('./src/inventory');
 const { previewBatch, hashRows } = require('./src/batch');
 const { buildResponsibilitySheet } = require('./src/responsibility');
 const { checkAppearances } = require('./src/appearance');
+const { previewRepairs } = require('./src/repair');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -149,6 +150,22 @@ app.post('/api/appearance/check', asyncRoute((req, res) => {
   // 纯读取 + 即时重放，不写入任何数据
   res.json(checkAppearances(store.getData(), rows));
 }));
+
+/* ---------------- 交接冲突修复预演（只读，即时结果，不改写交接记录） ---------------- */
+
+app.get('/api/repair/preview', (req, res) => {
+  let propId;
+  try {
+    propId = nonEmpty(req.query.propId, '道具');
+  } catch (err) {
+    return badRequest(res, err.message);
+  }
+
+  // 纯读取 + 即时重放，不写入任何数据
+  const result = previewRepairs(store.getData(), propId);
+  if (!result) return res.status(404).json({ error: '道具不存在' });
+  res.json(result);
+});
 
 /* ---------------- 道具 CRUD ---------------- */
 

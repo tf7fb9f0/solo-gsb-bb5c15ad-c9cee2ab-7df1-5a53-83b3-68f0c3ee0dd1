@@ -86,6 +86,14 @@ const els = {
   appBannerOk: $('#app-banner-ok'),
   appTableBody: document.querySelector('#app-table tbody'),
   btnAppClose: $('#btn-app-close'),
+  // 交接冲突修复预演
+  repairPanel: $('#repair-panel'),
+  repairProp: $('#repair-prop'),
+  repairMinute: $('#repair-minute'),
+  repairSummary: $('#repair-summary'),
+  repairConflict: $('#repair-conflict'),
+  repairCandidates: $('#repair-candidates'),
+  btnRepairClose: $('#btn-repair-close'),
 };
 
 const STATUS_TEXT = {
@@ -220,6 +228,10 @@ function renderConflictBox(result) {
       <div class="conflict-head">冲突类型：${typeText} · 第${c.minute}分钟</div>
       <div>${esc(c.reason)}</div>
       <div style="margin-top:4px">定位记录：${links}（已在右下表中红色标出）</div>
+      <div class="conflict-actions">
+        <button type="button" class="btn btn-sm" data-repair-prop="${esc(result.propId)}"
+          title="围绕首个冲突分钟枚举单条记录改动，预演整链重放结果（只读，不改写记录）">🛠 修复预演</button>
+      </div>
     </div>`;
 }
 
@@ -468,6 +480,9 @@ function bindEvents() {
   });
   els.btnAppClose.addEventListener('click', () => els.appPanel.classList.add('hidden'));
 
+  // 交接冲突修复预演
+  els.btnRepairClose.addEventListener('click', () => els.repairPanel.classList.add('hidden'));
+
   // 批量交接预演
   els.btnBatch.addEventListener('click', openBatchDialog);
   els.btnBatchAddRow.addEventListener('click', () => {
@@ -563,8 +578,14 @@ function bindEvents() {
       return;
     }
     const conflictLink = t.closest?.('[data-record-id]');
-    if (conflictLink && (t.closest('.conflict-box') || t.closest('#resp-panel') || t.closest('#appearance-panel'))) {
+    if (conflictLink && (t.closest('.conflict-box') || t.closest('#resp-panel') ||
+        t.closest('#appearance-panel') || t.closest('#repair-panel'))) {
       locateRecord(conflictLink.dataset.recordId);
+      return;
+    }
+    const repairBtn = t.closest?.('[data-repair-prop]');
+    if (repairBtn) {
+      runRepairPreview(repairBtn.dataset.repairProp);
     }
   });
 }
@@ -1144,6 +1165,85 @@ async function submitAppearance() {
     renderAppearanceResult(result);
     toast(result.summary.allInPosition ? '全部出场行核对到位（未改动交接记录）' : '核对完成（结果仅本次有效，未改动交接记录）',
       !result.summary.allInPosition);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+/* ==================== 交接冲突修复预演 ==================== */
+
+function repairCandidateCard(cand, idx) {
+  const r = cand.record;
+  const kindBadge = cand.kind === 'DELETE'
+    ? '<span class="inv-badge inv-bad">删除记录</span>'
+    : '<span class="inv-badge inv-neutral">修改交出者</span>';
+  const holderBadge = cand.returned
+    ? '<span class="badge badge-ok">✓ 修复后归仓</span>'
+    : '<span class="badge badge-warn">⚠ 修复后仍未归仓</span>';
+  return `
+    <div class="repair-card ${cand.returned ? 'ok' : 'warn'}">
+      <div class="repair-card-head">
+        <span class="repair-card-no">方案 ${idx + 1}</span>
+        ${kindBadge}
+        <span class="repair-change">${esc(cand.changeText)}</span>
+      </div>
+      <div class="repair-card-detail">
+        改动记录：第${r.minute}分 ${esc(r.from)} → ${esc(r.to)}${r.note ? `（${esc(r.note)}）` : ''}
+        · <a data-record-id="${esc(r.id)}">定位记录 ${shortId(r.id)}</a>
+      </div>
+      <div class="repair-card-detail">
+        修复后最终持有人：<strong>「${esc(cand.holderAfter)}」</strong> ${holderBadge}
+        <span class="repair-replay">（重放 ${cand.replayedCount} / ${cand.totalAfter} 条记录，整链无冲突）</span>
+      </div>
+    </div>`;
+}
+
+function renderRepairResult(result) {
+  els.repairProp.textContent = result.propName;
+
+  // 道具当前无冲突（点击预演后数据可能已被改好）
+  if (!result.conflict) {
+    els.repairMinute.textContent = '-';
+    els.repairSummary.innerHTML = '';
+    els.repairConflict.innerHTML = '';
+    els.repairCandidates.innerHTML =
+      `<div class="banner banner-ok repair-banner">${esc(result.message)}</div>`;
+  } else {
+    const c = result.conflict;
+    const s = result.summary;
+    els.repairMinute.textContent = c.minute;
+    const chips = [
+      [`冲突类型 ${c.typeText}`, 'chip-bad'],
+      [`冲突前持有人 ${c.holder}`, ''],
+      [`已尝试单条改动 ${s.tried} 种`, ''],
+      [`可行方案 ${s.workable} 个`, s.workable > 0 ? 'chip-ok' : 'chip-bad'],
+    ];
+    els.repairSummary.innerHTML = chips
+      .map(([text, cls]) => `<span class="inv-chip ${cls}">${text}</span>`)
+      .join('');
+
+    const links = c.recordRefs
+      .map((r) => `<a data-record-id="${esc(r.id)}">记录 ${shortId(r.id)}</a>`)
+      .join('、');
+    els.repairConflict.innerHTML = `
+      <div class="conflict-head">首个冲突：${esc(c.typeText)} · 第${c.minute}分钟</div>
+      <div>${esc(c.reason)}</div>
+      <div style="margin-top:4px">定位记录：${links}</div>`;
+
+    els.repairCandidates.innerHTML = result.candidates.length === 0
+      ? `<div class="banner banner-error repair-banner">${esc(result.message)}</div>`
+      : result.candidates.map(repairCandidateCard).join('');
+  }
+
+  els.repairPanel.classList.remove('hidden');
+  els.repairPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function runRepairPreview(propId) {
+  try {
+    const result = await api(`/api/repair/preview?propId=${encodeURIComponent(propId)}`);
+    renderRepairResult(result);
+    toast('修复预演完成（结果仅本次有效，未改动交接记录）');
   } catch (err) {
     toast(err.message, true);
   }

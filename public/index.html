@@ -106,6 +106,21 @@
       </div>
     </section>
 
+    <!-- 交接冲突修复预演结果（点击冲突卡片「修复预演」后即时展示，只读、不改写交接记录） -->
+    <section id="repair-panel" class="panel panel-repair hidden">
+      <div class="panel-head repair-head">
+        <h2>🛠 交接冲突修复预演 · <span id="repair-prop">-</span> · 首个冲突第 <span id="repair-minute">-</span> 分钟</h2>
+        <button type="button" class="btn btn-sm" id="btn-repair-close" title="关闭修复预演">✕ 关闭</button>
+      </div>
+      <div class="inv-summary" id="repair-summary"></div>
+      <div class="repair-conflict" id="repair-conflict"></div>
+      <div class="repair-tip">
+        预演只读，不会改动任何交接记录：每个候选都是「只改动一条记录」的假设，已按同分钟唯一链规则重放该道具全部记录，
+        仅列出整链无冲突的方案。请定位原记录人工核实后，在右下记录表中自行编辑或删除。
+      </div>
+      <div id="repair-candidates" class="repair-candidates"></div>
+    </section>
+
     <div class="grid">
       <!-- 左：核验结论与时间轴 -->
       <section class="panel panel-results">
